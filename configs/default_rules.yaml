@@ -1,0 +1,8 @@
+# default_rules.yaml
+# 包含用于检测敏感信息（如 API 密钥、密码、令牌）的默认正则表达式规则。
+# 这些规则将被 go:embed 打包在程序中。
+
+rules:
+  - id: generic-api-key
+    description: "检测常见的 API 密钥"
+    pattern: "(?i)api_key[\\s:=]+[a-z0-9-]{20,}"
