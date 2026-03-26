@@ -29,8 +29,10 @@ graph TD
     Engine --> Parser[Plugin Parser Interface]
     Scanner --> OS[File System]
     Parser --> YAML[YAML Plugin]
+    Parser --> URI[URI/URL Plugin]
     Parser --> JSON[JSON Plugin]
-    Parser --> PyAST[Python AST Plugin]
+    Engine --> Matcher[Advanced Rule Matcher]
+    Matcher --> Regexp2[Regexp2 Engine]
     Engine --> AI[AI False-Positive Filter]
 ```
 
@@ -38,13 +40,14 @@ graph TD
 
 ## 📅 项目现状
 
-本项目目前处于 **第一阶段：核心骨架与文件扫描** 完结状态。
+本项目目前处于 **第二阶段：规则引擎与全量语义解析** 完结状态。
 
 *   [x] 基于接口的依赖注入架构实现。
-*   [x] 后台并发文件遍历引擎。
-*   [x] 健壮的错误处理与日志接口。
-*   [x] 完善的命令行参数支持 (`-path`, `-v`)。
-*   [ ] (下一阶段) 秘密检测规则引擎与基础格式解析。
+*   [x] 强化型 YAML & URI 深度解析插件 (对齐原版 100% 逻辑)。
+*   [x] 高级规则匹配引擎 (支持正则断言、Luhn 校验、Base64 验证)。
+*   [x] 全量规则库迁移 (21 个分类，24 条核心探测规则)。
+*   [x] 智能相似度过滤 (Similarity Filter) 误报压制逻辑。
+*   [ ] (下一阶段) 更多插件扩展与 AI 识别层接入。
 
 ---
 
@@ -56,23 +59,18 @@ git clone <repository-url>
 cd DiTing
 ```
 
-### 2. 初始化与运行 (CLI)
-如果您尚未初始化 Go 模块：
+### 2. 运行扫描
+规则库位于 `configs/rules/`，程序会自动加载：
 ```bash
-go mod init ditting
-```
-
-运行扫描（使用默认测试目录）：
-```bash
-go run cmd/ditting-cli/main.go
+go run cmd/ditting-cli/main.go -path ./你的代码目录 -v
 ```
 
 ### ⌨️ 命令行参数
 
 | 参数 | 默认值 | 说明 |
 | :--- | :--- | :--- |
-| `-path` | `../tests/fixtures` | 指定要扫描的目标目录路径 |
-| `-v` | `false` | **详细模式**：开启后将实时打印每一个正在分析的文件路径 |
+| `-path` | `./` | 指定要扫描的目标目录或单个文件路径 |
+| `-v` | `false` | **详细模式**：实时打印扫描进度及加载的规则总数 |
 
 ---
 
