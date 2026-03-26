@@ -54,7 +54,7 @@
 
 ## 核心模块对照表 (Whispers vs. DiTing)
 
-| 功能模块 | 原版 Python (Whispers) | 新版 Go (DiTing) | 说明 |
+| 功能模块 | 原版 Python (Ditting) | 新版 Go (DiTing) | 说明 |
 | :--- | :--- | :--- | :--- |
 | **基础骨架** | `core.py`, `cli.py` | `internal/app/`, `cmd/` | Go 版本采用 Clean Architecture，解耦更彻底 |
 | **文件遍历** | `traverse.py` | `internal/scanner/` | Go 版本利用 Goroutine 实现原生并发扫描 |
