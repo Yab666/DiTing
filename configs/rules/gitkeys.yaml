@@ -1,0 +1,8 @@
+# Git 相关的 Token 规则
+github:
+  description: Github Token (包含个人、OAuth 等)
+  message: 发现 Github Token 泄露
+  severity: CRITICAL
+  value:
+    regex: ^(gh[pous]_[a-zA-Z0-9]{36}|ghr_[a-zA-Z0-9]{76})$
+    ignorecase: False

@@ -1,0 +1,8 @@
+# 私钥规则
+privatekey:
+  description: 格式类似于私钥的文本
+  message: 发现私钥 (Private Key) 泄露风险
+  severity: CRITICAL
+  value:
+    regex: .*[\-]{3,}BEGIN (RSA|DSA|EC|OPENSSH|PRIVATE)? ?(PRIVATE)? KEY[\-]{3,}.*
+    ignorecase: False

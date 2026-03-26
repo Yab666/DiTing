@@ -1,0 +1,12 @@
+# Docker 认证逻辑规则
+dockercfg:
+  description: 硬编码的 .dockercfg 认证信息
+  message: 发现 .dockercfg 认证信息
+  severity: CRITICAL
+  key:
+    regex: ^Dockercfg$
+    ignorecase: False
+  value:
+    isBase64: True
+    isAscii: True
+    minlen: 1

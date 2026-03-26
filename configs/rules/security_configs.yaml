@@ -1,0 +1,11 @@
+# 安全配置风险规则 (CORS 等)
+cors:
+  description: 不安全的跨域资源共享 (CORS) 配置
+  message: 发现不安全的 CORS 配置
+  severity: MAJOR
+  key:
+    regex: ^function$
+    ignorecase: False
+  value:
+    regex: ^(aiohttp_cors.)?ResourceOptions.*(allow_credentials|expose_headers|allow_headers)=(True|'?"?\*'?"?)
+    ignorecase: False

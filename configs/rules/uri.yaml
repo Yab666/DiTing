@@ -1,0 +1,8 @@
+# URI/URL 相关的检测规则
+uri-detection:
+  description: 识别常见的协议链接并触发深度解析
+  message: 发现连接字符串
+  severity: INFO
+  value:
+    # 匹配常见协议头
+    regex: (?i)(http|ftp|smtp|scp|ssh|jdbc[:\w\d]*|s3)s?://?.+

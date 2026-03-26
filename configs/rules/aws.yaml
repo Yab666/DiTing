@@ -1,0 +1,29 @@
+# AWS 相关的敏感信息规则
+aws-id:
+  description: 格式类似于 AWS Access Key ID 的值
+  message: 发现 AWS Access Key ID 泄露风险
+  severity: BLOCKER
+  value:
+    # 使用 regexp2 兼容的正则（包含断言）
+    regex: ^(?=.*[A-Z])(?=.*[0-9])A(AG|CC|GP|ID|IP|KI|NP|NV|PK|RO|SC|SI)A[A-Z0-9]{16}$
+    ignorecase: False
+
+aws-secret:
+  description: 格式类似于 AWS Secret Access Key 的值
+  message: 发现 AWS Secret Access Key 泄露风险
+  severity: BLOCKER
+  key:
+    regex: ^(?!.*name)
+    ignorecase: True
+  value:
+    regex: ^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])[A-Za-z0-9\+\/]{40}$
+    ignorecase: False
+
+aws-token:
+  description: 格式类似于 AWS Session Token 的值
+  message: 发现 AWS Session Token 泄露风险
+  severity: BLOCKER
+  value:
+    regex: ^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])[A-Za-z0-9\+\/]{270,450}$
+    ignorecase: False
+    isBase64: True

@@ -3,6 +3,8 @@ package main
 import (
 	"ditting/internal/app"
 	"ditting/internal/core"
+	"ditting/internal/plugin"
+	"ditting/internal/rule"
 	"ditting/internal/scanner"
 	"flag"
 	"fmt"
@@ -32,17 +34,29 @@ func main() {
 	// 1. 初始化日志组件
 	l := &ConsoleLogger{}
 
-	// 2. 初始化扫描配置
+	// 2. 加载规则库
+	loader := rule.NewRuleLoader()
+	rules, err := loader.LoadFromDir("configs/rules")
+	if err != nil {
+		l.Error("规则加载失败: %v", err)
+		return
+	}
+	l.Info("成功加载 %d 条过滤规则", len(rules))
+	matcher := rule.NewMatcher(rules)
+
+	// 3. 初始化扫描配置
 	config := &core.ScanConfig{
 		ExcludeFiles: []string{".git", "node_modules", "vendor"},
 	}
 
-	// 3. 创建真实的扫描器零件
+	// 4. 创建扫描器并注入
 	realScanner := scanner.NewScanner(config.ExcludeFiles, l)
-
-	// 4. 将所有依赖“注入”到引擎中
 	engine := app.NewEngine(config, realScanner, l, *verbose)
 
-	// 5. 运行引擎
+	// 5. 注册解析插件
+	engine.RegisterParser(plugin.NewYamlParser())
+	engine.SetMatcher(matcher)
+
+	// 6. 运行引擎
 	engine.Run(*scanPath)
 }

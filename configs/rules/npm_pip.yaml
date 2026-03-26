@@ -1,0 +1,30 @@
+# 各类包管理器的 Auth 规则
+npmrc:
+  description: 硬编码的 .npmrc authToken
+  message: 发现 .npmrc authToken 泄露
+  severity: CRITICAL
+  key:
+    regex: ^npm authToken$
+    ignorecase: False
+  value:
+    minlen: 1
+
+pip:
+  description: 硬编码的 pip.conf 密码
+  message: 发现 pip.conf 密码泄露
+  severity: CRITICAL
+  key:
+    regex: ^pip password$
+    ignorecase: False
+  value:
+    minlen: 1
+
+pypirc:
+  description: 硬编码的 .pypirc 密码
+  message: 发现 .pypirc 密码泄露
+  severity: CRITICAL
+  key:
+    regex: ^PyPI password$
+    ignorecase: False
+  value:
+    minlen: 1

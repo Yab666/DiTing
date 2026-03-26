@@ -1,0 +1,8 @@
+# Base64 编码规则
+base64: 
+  description: 看起来像 Base64 编码的文本
+  message: 发现 Base64 编码文本 (可能包含加密信息)
+  severity: INFO
+  value:
+    regex: ^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$
+    ignorecase: False

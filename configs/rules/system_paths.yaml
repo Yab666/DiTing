@@ -1,0 +1,17 @@
+# 系统路径与备注干扰规则
+path:
+  description: 识别字符串中的系统或网络路径 (通常用于负面过滤)
+  message: 发现路径信息
+  severity: INFO
+  value:
+    regex: ^((([A-Z]|file|root):)?(\.+)?[/\\]+).*$
+    ignorecase: True
+
+comments:
+  description: 识别注释中的潜在泄露
+  message: 发现敏感注释
+  severity: MINOR
+  key:
+    regex: "^comment$"
+    ignorecase: False
+    minlen: 1

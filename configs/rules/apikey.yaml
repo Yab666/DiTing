@@ -1,0 +1,14 @@
+# API Key 规则
+apikey: 
+  description: 变量名中包含 API Key 或 Token 的敏感信息
+  message: 发现 API Key/Token 风险
+  severity: MAJOR
+  key:
+    regex: .*[A-Za-z0-9\-\_]+(key|token)$
+    ignorecase: True
+  value:
+    regex: ^(?!.*[ ]) # 不包含空格
+    ignorecase: True
+    minlen: 16
+    isUri: False
+  similar: 0.35

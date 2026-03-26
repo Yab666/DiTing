@@ -10,13 +10,26 @@ type Secret struct {
 	Severity    string // 严重程度 (如: BLOCKER, CRITICAL, INFO)
 }
 
-// Rule 定义了一个扫描规则的匹配逻辑。
+// MatchConfig 定义了针对 Key 或 Value 的具体匹配配置。
+type MatchConfig struct {
+	Regex      string // 正则表达式
+	IgnoreCase bool   // 是否忽略大小写
+	MinLen     int    // 最小长度
+	IsBase64   bool   // 是否进行 Base64 检查
+	IsUri      bool   // 是否进行 URI 检查
+	IsLuhn     bool   // 是否进行 Luhn 校验 (如信用卡号)
+	IsAscii    bool   // 是否要求必须是 Ascii
+}
+
+// Rule 定义了一个扫描规则的完整匹配逻辑。
 type Rule struct {
-	ID          string // 规则唯一标识
-	Description string // 规则的人类可读描述
-	Severity    string // 默认严重程度
-	Regex       string // 正则表达式模式
-	MinLength   int    // 最小匹配长度
+	ID          string       // 规则唯一标识
+	Description string       // 规则的人类可读描述
+	Message     string       // 命中后展示的消息
+	Severity    string       // 严重程度 (BLOCKER, CRITICAL, MAJOR, MINOR, INFO)
+	Similar     float64      // 相似度阈值 (如果 Key 和 Value 太像，则可能是占位符，默认 0.3)
+	Key         *MatchConfig // 针对键名的匹配配置
+	Value       *MatchConfig // 针对键值的匹配配置
 }
 
 // ScanConfig 包含扫描任务的全局配置。

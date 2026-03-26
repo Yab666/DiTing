@@ -1,0 +1,11 @@
+# 危险函数调用规则 (可能导致 RCE 等)
+dangerous-functions:
+  description: 识别可能导致远程代码执行的危险函数调用
+  message: 发现危险函数调用
+  severity: MAJOR
+  key:
+    regex: ^function$
+    ignorecase: False
+  value:
+    regex: ^(eval|exec|(os.)?system|popen|call|subprocess\.(check_output|call))\(
+    ignorecase: True

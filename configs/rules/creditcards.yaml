@@ -1,0 +1,9 @@
+# 财务敏感信息规则 (信用卡等)
+creditcards:
+  description: 识别可能的信用卡号
+  message: 发现信用卡号泄露
+  severity: MAJOR
+  value:
+    regex: ^[0-9]{14,}$
+    ignorecase: False
+    isLuhn: True
