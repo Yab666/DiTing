@@ -1,0 +1,50 @@
+[
+  {
+    "RuleID": "htpasswd",
+    "Description": "硬编码的 .htpasswd 凭据 (Hash值)",
+    "FilePath": "E:\\我的项目\\whispers\\DiTing\\test_all\\.htpasswd",
+    "LineNumber": 1,
+    "Content": "ht-hash-123",
+    "Severity": "MAJOR"
+  },
+  {
+    "RuleID": "npmrc",
+    "Description": "硬编码的 .npmrc authToken",
+    "FilePath": "E:\\我的项目\\whispers\\DiTing\\test_all\\.npmrc",
+    "LineNumber": 1,
+    "Content": "a-completely-different-token-string",
+    "Severity": "CRITICAL"
+  },
+  {
+    "RuleID": "pypirc",
+    "Description": "硬编码的 .pypirc 密码",
+    "FilePath": "E:\\我的项目\\whispers\\DiTing\\test_all\\.pypirc",
+    "LineNumber": 1,
+    "Content": "a-very-different-pypi-secret-123",
+    "Severity": "CRITICAL"
+  },
+  {
+    "RuleID": "password-variable",
+    "Description": "变量名中包含 password 等字样的敏感信息",
+    "FilePath": "E:\\我的项目\\whispers\\DiTing\\test_all\\config.ini",
+    "LineNumber": 2,
+    "Content": "a-very-secret-password-123",
+    "Severity": "CRITICAL"
+  },
+  {
+    "RuleID": "comments",
+    "Description": "识别注释中的潜在泄露",
+    "FilePath": "E:\\我的项目\\whispers\\DiTing\\test_all\\test.html",
+    "LineNumber": 0,
+    "Content": "secret-in-html",
+    "Severity": "MINOR"
+  },
+  {
+    "RuleID": "password-variable",
+    "Description": "变量名中包含 password 等字样的敏感信息",
+    "FilePath": "E:\\我的项目\\whispers\\DiTing\\test_all\\test.properties",
+    "LineNumber": 1,
+    "Content": "prop-pass",
+    "Severity": "CRITICAL"
+  }
+]

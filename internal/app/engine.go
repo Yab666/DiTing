@@ -7,12 +7,14 @@ import (
 	"ditting/internal/rule"
 	"ditting/internal/scanner"
 	"ditting/pkg/logger"
+	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Engine 是扫描任务的核心控制器。
 type Engine struct {
-	Config  *core.ScanConfig
+	Config  *core.AppConfig
 	Scanner scanner.FileScanner
 	Logger  logger.Logger
 	Verbose bool // 是否打印详细扫描过程
@@ -22,7 +24,7 @@ type Engine struct {
 }
 
 // NewEngine 创建一个基于接口的引擎实例。
-func NewEngine(config *core.ScanConfig, s scanner.FileScanner, l logger.Logger, verbose bool) *Engine {
+func NewEngine(config *core.AppConfig, s scanner.FileScanner, l logger.Logger, verbose bool) *Engine {
 	return &Engine{
 		Config:  config,
 		Scanner: s,
@@ -31,7 +33,6 @@ func NewEngine(config *core.ScanConfig, s scanner.FileScanner, l logger.Logger, 
 		Parsers: make(map[string]plugin.Parser),
 	}
 }
-
 // RegisterParser 注册一个文件解析插件。
 func (e *Engine) RegisterParser(p plugin.Parser) {
 	for _, ext := range p.SupportedExtensions() {
@@ -44,14 +45,13 @@ func (e *Engine) SetMatcher(m *rule.Matcher) {
 	e.Matcher = m
 }
 
-// Run 启动整个扫描和分析流程。
-func (e *Engine) Run(root string) {
+// Run 启动整个扫描和分析流程，并返回找到的所有秘密对象。
+func (e *Engine) Run(root string) []core.Secret {
 	e.Logger.Info("开始扫描目录: %s", root)
 
-	// 创建用于接收文件路径的管道
-	filePaths := make(chan string, 100)
+	var allSecrets []core.Secret
 
-	// 在后台启动文件扫描器
+	filePaths := make(chan string, 100)
 	go func() {
 		err := e.Scanner.Scan(root, filePaths)
 		if err != nil {
@@ -59,23 +59,22 @@ func (e *Engine) Run(root string) {
 		}
 	}()
 
-	// 主循环：处理扫描到的每一个文件
 	count := 0
 	for path := range filePaths {
 		count++
-		if e.Verbose {
-			e.Logger.Info("正在分析: %s", path)
+
+		// 1. 获取对应的解析器 (智能调度逻辑)
+		p := e.getParserForFile(path)
+		if p == nil {
+			continue
 		}
 
-		// 1. 获取对应的解析器
-		ext := filepath.Ext(path)
-		parser, ok := e.Parsers[ext]
-		if !ok {
-			continue // 暂不支持的文件类型，跳过
+		if e.Verbose {
+			e.Logger.Info("正在分析: %s (解析器: %T)", path, p)
 		}
 
 		// 2. 解析文件内容
-		kvs, err := parser.Parse(context.Background(), path)
+		kvs, err := p.Parse(context.Background(), path)
 		if err != nil {
 			e.Logger.Warn("解析失败 [%s]: %v", path, err)
 			continue
@@ -84,13 +83,110 @@ func (e *Engine) Run(root string) {
 		// 3. 匹配规则
 		if e.Matcher != nil {
 			for _, kv := range kvs {
+				if e.Verbose {
+					e.Logger.Info("  [检查 KV] Key=%s, Value=%s", kv.Key, kv.Value)
+				}
 				if rule := e.Matcher.Match(kv); rule != nil {
+					// 持续在控制台输出警告（为了 CI/CD 实时观察）
 					e.Logger.Warn("发现潜在泄露! [文件: %s] [行号: %d] [描述: %s] [匹配值: %s]",
 						path, kv.Line, rule.Description, kv.Value)
+					
+					// 收集进结果池用于最终导出报表
+					allSecrets = append(allSecrets, core.Secret{
+						RuleID:      rule.ID,
+						Description: rule.Description,
+						FilePath:    path,
+						LineNumber:  kv.Line,
+						Content:     kv.Value,
+						Severity:    rule.Severity,
+					})
 				}
 			}
 		}
 	}
 
-	e.Logger.Info("扫描完成。共分析文件: %d", count)
+	e.Logger.Info("扫描完成。共分析文件: %d，发现 %d 处泄露。", count, len(allSecrets))
+	return allSecrets
+}
+
+// getParserForFile 实现了与原版 Whispers 类似的智能插件选择逻辑。
+func (e *Engine) getParserForFile(path string) plugin.Parser {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() < 7 {
+		return nil
+	}
+
+	name := filepath.Base(path)
+	ext := strings.ToLower(filepath.Ext(path))
+
+	// 处理 .dist 或 .template 后缀
+	if ext == ".dist" || ext == ".template" {
+		actualName := strings.TrimSuffix(name, ext)
+		ext = strings.ToLower(filepath.Ext(actualName))
+		if ext == "" {
+			ext = actualName // 处理没有后缀的情况
+		}
+	}
+
+	// 1. 根据文件名和扩展名初步匹配
+	switch {
+	case ext == ".yaml" || ext == ".yml":
+		return e.Parsers[".yaml"]
+	case ext == ".json":
+		return e.Parsers[".json"]
+	case ext == ".xml":
+		return e.Parsers[".xml"]
+	case strings.HasPrefix(name, ".npmrc"):
+		return e.Parsers[".npmrc"]
+	case strings.HasPrefix(name, ".pypirc"):
+		return e.Parsers[".pypirc"]
+	case name == "pip.conf" || name == "pip.ini":
+		return e.Parsers["pip.conf"]
+	case ext == ".properties":
+		return e.Parsers[".properties"]
+	case strings.HasSuffix(ext, "sh") || ext == ".env":
+		return e.Parsers[".sh"]
+	case strings.HasPrefix(name, "Dockerfile"):
+		return e.Parsers["Dockerfile"]
+	case ext == ".dockercfg" || name == "config.json":
+		return e.Parsers[".dockercfg"]
+	case strings.HasPrefix(name, ".htpasswd"):
+		return e.Parsers[".htpasswd"]
+	case ext == ".txt":
+		return e.Parsers[".txt"]
+	case strings.HasPrefix(ext, ".htm"):
+		return e.Parsers[".html"]
+	case ext == ".py" || strings.HasPrefix(ext, ".py"):
+		return e.Parsers[".py"]
+	case ext == ".js" || ext == ".mjs":
+		return e.Parsers[".js"]
+	case ext == ".java":
+		return e.Parsers[".java"]
+	case ext == ".go":
+		return e.Parsers[".go"]
+	case strings.HasPrefix(ext, ".php"):
+		return e.Parsers[".php"]
+	case ext == ".conf" || ext == ".cfg" || ext == ".config" || ext == ".ini" || ext == ".credentials" || ext == ".s3cfg":
+		// 对齐原版：检查是否是 XML 格式的 Config
+		if isXMLFile(path) {
+			return e.Parsers[".xml"]
+		}
+		return e.Parsers[".conf"]
+	}
+
+	return nil
+}
+
+// isXMLFile 检查文件头是否包含 XML 声明
+func isXMLFile(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	
+	buf := make([]byte, 64)
+	n, _ := f.Read(buf)
+	content := string(buf[:n])
+	return strings.HasPrefix(content, "<?xml ")
 }

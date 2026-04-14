@@ -4,6 +4,7 @@ import (
 	"ditting/internal/core"
 	"ditting/internal/plugin"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"unicode"
 
@@ -12,22 +13,84 @@ import (
 
 // Matcher 负责将提取出的键值对与规则进行深度匹配。
 type Matcher struct {
-	Rules []*core.Rule
+	Rules  []*core.Rule
+	Config *core.AppConfig
 	// 预编译用于 isUri 检查的正则
 	uriRegex *regexp2.Regexp
+	// 预编译用于全局免扫描的正则 (路径/键名/键值)
+	excludePathRegexes  []*regexp2.Regexp
+	excludeKeyRegexes   []*regexp2.Regexp
+	excludeValueRegexes []*regexp2.Regexp
+}
+
+// compileRegexList 辅助方法，用于编译字符数组到正则数组
+func compileRegexList(patterns []string) []*regexp2.Regexp {
+	var regexes []*regexp2.Regexp
+	for _, pattern := range patterns {
+		if re, err := regexp2.Compile(pattern, regexp2.IgnoreCase); err == nil {
+			regexes = append(regexes, re)
+		}
+	}
+	return regexes
 }
 
 // NewMatcher 创建一个新的匹配器。
-func NewMatcher(rules []*core.Rule) *Matcher {
-	return &Matcher{
-		Rules: rules,
+func NewMatcher(rules []*core.Rule, config *core.AppConfig) *Matcher {
+	m := &Matcher{
+		Rules:    rules,
+		Config:   config,
 		// 使用与原版一致的 URI 识别正则
 		uriRegex: regexp2.MustCompile(`(?i)(http|ftp|smtp|scp|ssh|jdbc[:\w\d]*|s3)s?://?.+`, 0),
 	}
+
+	// 预编译配置中的排查规则（支持正则）
+	if config != nil {
+		m.excludePathRegexes = compileRegexList(config.Exclude.Paths)
+		m.excludeKeyRegexes = compileRegexList(config.Exclude.Keys)
+		m.excludeValueRegexes = compileRegexList(config.Exclude.Values)
+	}
+
+	return m
+}
+
+// matchAny 辅助方法，检查文本是否匹配正则数组中的任何一项
+func matchAny(text string, regexes []*regexp2.Regexp) bool {
+	if text == "" || len(regexes) == 0 {
+		return false
+	}
+	for _, re := range regexes {
+		if match, _ := re.MatchString(text); match {
+			return true
+		}
+	}
+	return false
+}
+
+// IsExcluded 测试当前 KV 是否被用户全局配置明确排除。
+func (m *Matcher) IsExcluded(kv plugin.KeyValue) bool {
+	if matchAny(kv.Path, m.excludePathRegexes) {
+		return true
+	}
+	if matchAny(kv.Key, m.excludeKeyRegexes) {
+		return true
+	}
+	if matchAny(kv.Value, m.excludeValueRegexes) {
+		return true
+	}
+	return false
 }
 
 // Match 检查一个键值对是否命中了任何规则。
 func (m *Matcher) Match(kv plugin.KeyValue) *core.Rule {
+	// 1. 全局配置排除检查 (对齐 Whispers secrets.py -> is_excluded)
+	if m.IsExcluded(kv) {
+		return nil
+	}
+	// 2. 如果是动态变量或占位符，直接跳过 (逻辑对齐 is_static)
+	if !m.IsStatic(kv.Key, kv.Value) {
+		return nil
+	}
+
 	for _, rule := range m.Rules {
 		if m.CheckRule(rule, kv) {
 			return rule
@@ -38,29 +101,70 @@ func (m *Matcher) Match(kv plugin.KeyValue) *core.Rule {
 
 // CheckRule 验证单个规则是否匹配给定的键值对。
 func (m *Matcher) CheckRule(rule *core.Rule, kv plugin.KeyValue) bool {
-	// 1. 相似度检查 (防止占位符误报)
+	// 1. 相似度检查
 	threshold := rule.Similar
 	if threshold == 0 {
-		threshold = 0.3
+		threshold = 0.7
 	}
-	if m.similarityRatio(kv.Key, kv.Value) >= threshold {
+	ratio := m.similarityRatio(kv.Key, kv.Value)
+	if ratio >= threshold {
+		fmt.Printf("[DEBUG] Rule %s similarity rejected: ratio %f >= threshold %f\n", rule.ID, ratio, threshold)
 		return false
 	}
 
-	// 2. 如果规则定义了 Key 匹配要求，但 Key 不匹配，则返回 false
+	// 2. Key 匹配
 	if rule.Key != nil {
 		if !m.matchConfig(rule.Key, kv.Key) {
+			fmt.Printf("[DEBUG] Rule %s key rejected: KV_Key=%s Regex=%s\n", rule.ID, kv.Key, rule.Key.Regex)
 			return false
 		}
 	}
 
-	// 3. 如果规则定义了 Value 匹配要求，但 Value 不匹配，则返回 false
+	// 3. Value 匹配
 	if rule.Value != nil {
 		if !m.matchConfig(rule.Value, kv.Value) {
+			fmt.Printf("[DEBUG] Rule %s value rejected: KV_Value=%s\n", rule.ID, kv.Value)
 			return false
 		}
 	}
-	
+
+	return true
+}
+
+// IsStatic 检查给定的值是否是静态硬编码的秘密（而非动态变量或占位符）。
+// 对应原版 whispers/secrets.py 中的 is_static 逻辑。
+func (m *Matcher) IsStatic(key, value string) bool {
+	if value == "" || value == "null" {
+		return false
+	}
+
+	// 过滤常见的动态变量格式
+	if strings.HasPrefix(value, "$") && !strings.Contains(value[1:], "$") {
+		return false // e.g. $VAR
+	}
+	if strings.Contains(value, "{{") && strings.Contains(value, "}}") {
+		return false // e.g. {{.SECRET}}
+	}
+	if strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}") {
+		return false // e.g. ${SECRET}
+	}
+	if strings.HasPrefix(value, "<") && strings.HasSuffix(value, ">") {
+		return false // e.g. <PLACEHOLDER>
+	}
+
+	// 过滤 IaC 引用 (CloudFormation 等)
+	if strings.HasPrefix(value, "!") {
+		return false // e.g. !Ref, !Sub
+	}
+
+	// 如果 Key 和 Value 完全一致，或者是 Value 以 Key 结尾（如 "my_password": "my_password"）
+	// 通常是测试代码或占位符
+	sKey := strings.ToLower(strings.TrimSpace(key))
+	sValue := strings.ToLower(strings.TrimSpace(value))
+	if sKey != "" && (sKey == sValue || strings.HasSuffix(sValue, sKey)) {
+		return false
+	}
+
 	return true
 }
 
@@ -93,13 +197,9 @@ func (m *Matcher) similarityRatio(a, b string) float64 {
 
 // matchConfig 根据配置验证字符串是否合规。
 func (m *Matcher) matchConfig(cfg *core.MatchConfig, text string) bool {
-	if text == "" {
-		// 如果规则没定义正则表达式，只是定义了 isBase64 等，空文可能不匹配
-		// 遵循原版逻辑：有 Regex 则先过 Regex，没有则认为匹配基础成功
-	}
-
 	// A. 长度检查
 	if cfg.MinLen > 0 && len(text) < cfg.MinLen {
+		fmt.Printf("DEBUG: MinLen check failed: len(%s)=%d < %d\n", text, len(text), cfg.MinLen)
 		return false
 	}
 
@@ -117,12 +217,12 @@ func (m *Matcher) matchConfig(cfg *core.MatchConfig, text string) bool {
 		
 		match, err := re.MatchString(text)
 		if err != nil || !match {
+			fmt.Printf("DEBUG: Regex check failed for %s with regex %s\n", text, cfg.Regex)
 			return false
 		}
 	}
 
-	// C. IsBase64 检查 (这里其实有逻辑差：原版是判断“是否是Base64且解码后如何”)
-	// 简化对齐：如果要求是Base64，则必须能解码
+	// C. IsBase64 检查
 	if cfg.IsBase64 {
 		_, err := base64.StdEncoding.DecodeString(text)
 		if err != nil {
@@ -130,25 +230,17 @@ func (m *Matcher) matchConfig(cfg *core.MatchConfig, text string) bool {
 		}
 	}
 
-	// D. IsUri 检查 (同步原版：要求结果必须等于 isUri 的布尔值)
-	// 原版逻辑：if "isUri" in rule: return rule["isUri"] == is_uri(text)
+	// D. IsUri 检查
 	isUriText, _ := m.uriRegex.MatchString(text)
-	// 注意：由于 cfg.IsUri 默认为 false，我们需要辨别它是“未设置”还是“显式设置为 false”
-	// 在我们的 struct 中目前无法辨别。但原版规则如 apikey 显式设为 isUri: False
-	// 我们暂定如果配置了该字段，则进行校验。
-	// 这里其实有一个坑：Go 的 bool 默认 false。
-	// 改进：这里我们主要看规则里显式写的 False。
 	if cfg.IsUri && !isUriText {
 		return false
 	}
-	// 如果规则要求 NOT URI (isUri: False)，但实际上是 URI
-	// 这种情况目前无法完全对齐，除非使用 *bool。
-	// 暂且跳过，针对主要泄露点优化。
 
 	// E. IsAscii 检查
 	if cfg.IsAscii {
 		for _, r := range text {
 			if r > unicode.MaxASCII {
+				fmt.Printf("DEBUG: Ascii check failed for %s\n", text)
 				return false
 			}
 		}

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DiTing Security Radar</title>
+    <!-- Use Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- 移除了花里胡哨的背景发光球，回归高端极简深色模式 -->
+        <div class="container">
+            <!-- 头部区 -->
+            <header class="header">
+                <div class="logo">
+                    <i class="ph-fill ph-shield-check text-accent"></i>
+                    <div>
+                        <h1>DiTing</h1>
+                        <span class="subtitle">新一代智能静态安全审计台</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 扫描控制区 -->
+            <section class="control-panel panel">
+                <div class="input-group">
+                    <i class="ph ph-folder-open"></i>
+                    <input type="text" v-model="scanPath" @keyup.enter="startScan" :disabled="isScanning" placeholder="请输入需要扫描的绝对路径 (如 E:/项目代码)">
+                </div>
+                <div class="input-group" style="max-width: 330px; border-left: 1px solid var(--border-color); border-radius: 0;">
+                    <i class="ph ph-key"></i>
+                    <input type="password" v-model="apiKey" placeholder="DeepSeek API Key (可选)">
+                </div>
+                <div class="input-group" style="max-width: 200px; border-left: 1px solid var(--border-color); border-radius: 0;">
+                    <i class="ph ph-sliders"></i>
+                    <select v-model="contextLevel" style="background: transparent; border: none; color: var(--text-primary); outline: none; width: 100%; cursor: pointer;">
+                        <option value="1">视野 Lv1 (仅单行)</option>
+                        <option value="2">视野 Lv2 (±5行)</option>
+                        <option value="3">视野 Lv3 (±20行)</option>
+                        <option value="4">视野 Lv4 (±50行)</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" @click="startScan" :disabled="isScanning">
+                    <i class="ph ph-radar" :class="{ spinning: isScanning }"></i>
+                    {{ isScanning ? '引擎全域检索中...' : '启动雷达扫描' }}
+                </button>
+            </section>
+
+            <!-- 统计数据区 -->
+            <section class="stats-grid" v-if="hasScanned">
+                 <div class="stat-card panel" :class="{ 'alert-red': totalCritical > 0 }">
+                     <span class="stat-label">致命漏洞 (CRITICAL)</span>
+                     <span class="stat-value text-red">{{ totalCritical }}</span>
+                 </div>
+                 <div class="stat-card panel" :class="{ 'alert-orange': totalMajor > 0 }">
+                    <span class="stat-label">高危隐患 (MAJOR)</span>
+                    <span class="stat-value text-orange">{{ totalMajor }}</span>
+                </div>
+                <div class="stat-card panel">
+                    <span class="stat-label">捕获总数 (TOTAL)</span>
+                    <span class="stat-value text-blue">{{ results.length }}</span>
+                </div>
+            </section>
+
+            <!-- 状态提示 -->
+            <div v-if="isScanning" class="status-box">
+                <div class="loader"></div>
+                <p>引擎全功率运转中，正在进行深度语义与弱点降噪分析...</p>
+            </div>
+            <div v-else-if="hasScanned && results.length === 0" class="status-box success">
+                <i class="ph-fill ph-check-circle"></i>
+                <p>安全！未发现高危代码泄露，当前项目状态极佳。</p>
+            </div>
+
+            <!-- 数据表格区 -->
+            <section class="table-panel panel" v-if="!isScanning && results.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>风险等级</th>
+                            <th>命中规则</th>
+                            <th>文件路径</th>
+                            <th>代码快照</th>
+                            <th class="text-right">智能研判</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(item, idx) in results" :key="idx">
+                            <td><span class="badge" :class="item.Severity.toLowerCase()">{{ item.Severity }}</span></td>
+                            <td class="font-mono text-sm">{{ item.RuleID }}</td>
+                            <td class="text-muted" :title="item.FilePath">{{ shortenPath(item.FilePath) }} <span class="line-badge">L{{ item.LineNumber }}</span></td>
+                            <td><code class="snippet">{{ item.Content }}</code></td>
+                            <td class="text-right">
+                                <!-- 预留给 LLM 的接入点 -->
+                                <button class="btn-ai" @click="verifyWithAI(item, idx)" :disabled="item.aiVerifying">
+                                    <i class="ph ph-magic-wand" :class="{ spinning: item.aiVerifying }"></i>
+                                    {{ item.aiStatus || 'AI 复核' }}
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+            <!-- Chat Modal -->
+            <div class="chat-overlay" v-if="showAiModal" @click.self="closeAiModal">
+                <div class="chat-modal">
+                    <div class="chat-header">
+                        <h2><i class="ph-fill ph-magic-wand"></i> 谛听 AI 智能研判中心</h2>
+                        <button class="btn-close" @click="closeAiModal"><i class="ph ph-x"></i></button>
+                    </div>
+                    <div class="chat-body" ref="chatBody">
+                        <div v-for="(msg, i) in aiMessages" :key="i" :class="['chat-bubble', msg.role === 'user' ? 'user' : 'ai']">
+                            <div class="bubble-content" v-html="msg.content"></div>
+                        </div>
+                        <div v-if="isAiThinking" class="chat-bubble ai typing">
+                            <div class="bubble-content">
+                                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

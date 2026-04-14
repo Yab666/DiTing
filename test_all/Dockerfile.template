@@ -1,0 +1,2 @@
+FROM alpine
+ENV SECRET=docker-temp-pass

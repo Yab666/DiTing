@@ -1,9 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"ditting/internal/ui"
+	"flag"
+	"fmt"
+	"os"
+)
 
-// main 是 whispers-web 的入口函数。
-// 该程序将启动一个 Web 服务，提供 RESTful API 和管理后台界面。
 func main() {
-	fmt.Println("Whispers Web - 静态扫描管理后端启动中...")
+	port := flag.Int("port", 8080, "Web 控制台的访问端口")
+	flag.Parse()
+
+	if err := ui.StartWebServer(*port); err != nil {
+		fmt.Printf("Web 控制台启动失败: %v\n", err)
+		os.Exit(1)
+	}
 }

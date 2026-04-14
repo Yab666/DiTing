@@ -81,7 +81,14 @@ func (l *RuleLoader) parseMatchConfig(m map[string]interface{}) *core.MatchConfi
 	
 	if val, ok := m["regex"].(string); ok { cfg.Regex = val }
 	if val, ok := m["ignorecase"].(bool); ok { cfg.IgnoreCase = val }
-	if val, ok := m["minlen"].(int); ok { cfg.MinLen = val }
+	
+	// YAML 数字可能被解析为 int 或 float64
+	if val, ok := m["minlen"].(int); ok {
+		cfg.MinLen = val
+	} else if val, ok := m["minlen"].(float64); ok {
+		cfg.MinLen = int(val)
+	}
+
 	if val, ok := m["isBase64"].(bool); ok { cfg.IsBase64 = val }
 	if val, ok := m["isUri"].(bool); ok { cfg.IsUri = val }
 	if val, ok := m["isLuhn"].(bool); ok { cfg.IsLuhn = val }

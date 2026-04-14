@@ -171,8 +171,9 @@ func (p *YamlParser) traverse(node *yaml.Node, currentPath string, results *[]Ke
 			}
 
 			// 处理带标签的内容（例如云定义中的 !Ref 等标签）
+			// 注意：排除 yaml.v3 的标准类型标签，比如 !!str, !!int 等
 			valText := valNode.Value
-			if valNode.Tag != "" && !strings.Contains(valNode.Tag, "yaml") {
+			if valNode.Tag != "" && !strings.HasPrefix(valNode.Tag, "!!") {
 				valText = valNode.Tag + " " + valText
 			}
 

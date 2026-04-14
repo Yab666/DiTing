@@ -32,9 +32,20 @@ type Rule struct {
 	Value       *MatchConfig // 针对键值的匹配配置
 }
 
-// ScanConfig 包含扫描任务的全局配置。
-type ScanConfig struct {
-	IncludeFiles []string // 包含的文件 Glob 模式
-	ExcludeFiles []string // 排除的文件 Glob 模式
-	RulesPath    string   // 外部规则文件路径
+// AppConfig 包含地听扫描引擎的全局配置，可由 .ditingrc 或 CLI 覆盖。
+type AppConfig struct {
+	Include IncludeConfig `yaml:"include"`
+	Exclude ExcludeConfig `yaml:"exclude"`
+	Rules   string        `yaml:"rules"` // 外部规则目录路径
+}
+
+type IncludeConfig struct {
+	Files []string `yaml:"files"` // 如 ["**/*.go", "**/*.json"]
+}
+
+type ExcludeConfig struct {
+	Files  []string `yaml:"files"`  // 如 [".git", "node_modules", "vendor"]
+	Keys   []string `yaml:"keys"`   // 要排除的键名正则表达式
+	Values []string `yaml:"values"` // 要排除的键值正则表达式
+	Paths  []string `yaml:"paths"`  // 要排除的具体 JSON/YAML 路径 (面包屑)
 }
