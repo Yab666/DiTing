@@ -8,6 +8,8 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -19,7 +21,7 @@
             <!-- 头部区 -->
             <header class="header">
                 <div class="logo">
-                    <i class="ph-fill ph-shield-check text-accent"></i>
+                    <img src="assets/logo.png" style="height: 48px; width: 48px; border-radius: 8px; margin-right: 4px;">
                     <div>
                         <h1>DiTing</h1>
                         <span class="subtitle">新一代智能静态安全审计台</span>
@@ -52,52 +54,119 @@
                 </button>
             </section>
 
-            <!-- 统计数据区 -->
-            <section class="stats-grid" v-if="hasScanned">
-                 <div class="stat-card panel" :class="{ 'alert-red': totalCritical > 0 }">
-                     <span class="stat-label">致命漏洞 (CRITICAL)</span>
-                     <span class="stat-value text-red">{{ totalCritical }}</span>
-                 </div>
-                 <div class="stat-card panel" :class="{ 'alert-orange': totalMajor > 0 }">
-                    <span class="stat-label">高危隐患 (MAJOR)</span>
-                    <span class="stat-value text-orange">{{ totalMajor }}</span>
+            <!-- 实时仪表盘 / 数字化大屏 -->
+            <section class="dashboard-grid" v-if="isScanning || hasScanned">
+                <!-- 左侧：统计卡片组 -->
+                <div class="stats-sidebar">
+                    <div class="stat-card panel" :class="{ 'warning-glow': isScanning }">
+                        <div class="stat-icon"><i class="ph ph-files"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value">{{ scanStats.filesProcessed }}</span>
+                            <span class="stat-label">分析文件</span>
+                        </div>
+                    </div>
+                    <div class="stat-card panel critical" :class="{ 'critical-glow': results.length > 0 }">
+                        <div class="stat-icon"><i class="ph ph-bug"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value">{{ results.length }}</span>
+                            <span class="stat-label">捕获点</span>
+                        </div>
+                    </div>
+                    <div class="stat-card panel warning">
+                        <div class="stat-icon"><i class="ph ph-warning-diamond"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value">{{ totalCritical }}</span>
+                            <span class="stat-label">致命风险</span>
+                        </div>
+                    </div>
+                    <div class="stat-card panel time">
+                        <div class="stat-icon"><i class="ph ph-timer"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value">{{ scanStats.duration }}s</span>
+                            <span class="stat-label">实时耗时</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-card panel">
-                    <span class="stat-label">捕获总数 (TOTAL)</span>
-                    <span class="stat-value text-blue">{{ results.length }}</span>
+
+                <!-- 中间：实时扫描终端 (极客风) -->
+                <div class="console-panel panel">
+                    <div class="panel-header">
+                        <span><i class="ph ph-terminal"></i> REAL-TIME ENGINE LOGS</span>
+                        <div class="status-indicator" :class="{ active: isScanning }"></div>
+                    </div>
+                    <div class="console-body" ref="consoleBody">
+                        <div v-for="(log, idx) in consoleLogs" :key="idx" class="log-line">
+                            <span class="log-cursor">>></span> {{ log }}
+                        </div>
+                        <div v-if="isScanning" class="log-line typing">
+                            <span class="log-cursor">>></span> 分析中...<span class="dot">.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：可视化图表 -->
+                <div class="charts-sidebar panel">
+                   <div class="chart-box">
+                       <canvas id="typeChart"></canvas>
+                   </div>
+                   <div class="chart-box">
+                       <canvas id="severityChart"></canvas>
+                   </div>
                 </div>
             </section>
 
-            <!-- 状态提示 -->
-            <div v-if="isScanning" class="status-box">
-                <div class="loader"></div>
-                <p>引擎全功率运转中，正在进行深度语义与弱点降噪分析...</p>
-            </div>
-            <div v-else-if="hasScanned && results.length === 0" class="status-box success">
-                <i class="ph-fill ph-check-circle"></i>
-                <p>安全！未发现高危代码泄露，当前项目状态极佳。</p>
-            </div>
-
             <!-- 数据表格区 -->
             <section class="table-panel panel" v-if="!isScanning && results.length > 0">
+                <!-- 筛选与搜索工具条 -->
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" v-model="filterSearch" placeholder="搜索路径、规则、内容...">
+                    </div>
+                    <select v-model="filterSeverity">
+                        <option value="ALL">全部严重程度</option>
+                        <option value="CRITICAL">Critical</option>
+                        <option value="MAJOR">Major</option>
+                        <option value="MINOR">Minor</option>
+                        <option value="INFO">Info</option>
+                    </select>
+                    <select v-model="previewContextLevel" @change="clearPreviews" style="max-width: 140px;">
+                        <option value="1">预览量: 极小 (±2)</option>
+                        <option value="2" selected>预览量: 标准 (±5)</option>
+                        <option value="3">预览量: 丰富 (±10)</option>
+                        <option value="4">预览量: 全景 (±20)</option>
+                    </select>
+                    <div class="text-secondary text-sm">
+                        匹配项: {{ filteredResults.length }} / {{ results.length }}
+                    </div>
+                </div>
+
                 <table>
                     <thead>
                         <tr>
-                            <th>风险等级</th>
-                            <th>命中规则</th>
-                            <th>文件路径</th>
-                            <th>代码快照</th>
+                            <th class="sortable" @click="toggleSort('Severity')" :class="{'active-sort': sortKey === 'Severity'}">风险等级</th>
+                            <th class="sortable" @click="toggleSort('RuleID')" :class="{'active-sort': sortKey === 'RuleID'}">命中规则</th>
+                            <th class="sortable" @click="toggleSort('FilePath')" :class="{'active-sort': sortKey === 'FilePath'}">文件路径</th>
+                            <th class="sortable" @click="toggleSort('Content')" :class="{'active-sort': sortKey === 'Content'}">代码快照</th>
                             <th class="text-right">智能研判</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(item, idx) in results" :key="idx">
+                        <tr v-for="(item, idx) in filteredResults" :key="idx">
                             <td><span class="badge" :class="item.Severity.toLowerCase()">{{ item.Severity }}</span></td>
                             <td class="font-mono text-sm">{{ item.RuleID }}</td>
                             <td class="text-muted" :title="item.FilePath">{{ shortenPath(item.FilePath) }} <span class="line-badge">L{{ item.LineNumber }}</span></td>
-                            <td><code class="snippet">{{ item.Content }}</code></td>
+                            <td>
+                                <!-- 悬浮上下文预览容器 -->
+                                <div class="popover-container" @mouseenter="loadPreview(item)">
+                                    <code class="snippet">{{ item.Content }}</code>
+                                    <div class="popover-content">
+                                        <div class="popover-header"><i class="ph ph-eye"></i> 代码上下文实时预览 (±5行)</div>
+                                        <div class="popover-body" v-html="hoverPreviews[item.FilePath + ':' + item.LineNumber] || '<div style=\'padding:20px;text-align:center\'><i class=\'ph ph-spinner-gap spinning\'></i> 正在调取原文...</div>'"></div>
+                                    </div>
+                                </div>
+                            </td>
                             <td class="text-right">
-                                <!-- 预留给 LLM 的接入点 -->
                                 <button class="btn-ai" @click="verifyWithAI(item, idx)" :disabled="item.aiVerifying">
                                     <i class="ph ph-magic-wand" :class="{ spinning: item.aiVerifying }"></i>
                                     {{ item.aiStatus || 'AI 复核' }}

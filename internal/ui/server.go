@@ -11,10 +11,12 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"ditting/internal/app"
+	"ditting/internal/core"
 	"ditting/internal/plugin"
 	"ditting/internal/rule"
 	"ditting/internal/scanner"
@@ -41,8 +43,10 @@ func StartWebServer(port int) error {
 
 	// API 路由
 	http.HandleFunc("/api/scan", handleScan)
+	http.HandleFunc("/api/scan/stream", handleScanStream)
 	http.HandleFunc("/api/llm/verify", handleLLMVerify)
 	http.HandleFunc("/api/ui/pick-folder", handlePickFolder)
+	http.HandleFunc("/api/ui/preview", handlePreview)
 
 	// 静态资源路由（映射 embed.FS 里的 web 目录）
 	subFS, err := fs.Sub(webAssets, "web")
@@ -125,11 +129,88 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 
 	// 5. 返回 JSON
 	w.Header().Set("Content-Type", "application/json")
-	if secrets == nil {
-		w.Write([]byte("[]")) // 确保不会返回 null
+	json.NewEncoder(w).Encode(secrets)
+}
+
+// ScanEvent 代表一个实时的扫描事件包
+type ScanEvent struct {
+	Type string      `json:"type"` // progress, found, done
+	Data interface{} `json:"data"`
+}
+
+// handleScanStream 实现 SSE 实时流式扫描
+func handleScanStream(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", "Missing path")
 		return
 	}
-	json.NewEncoder(w).Encode(secrets)
+
+	flusher, _ := w.(http.Flusher)
+
+	// 1. 初始化引擎与配置
+	l := &memLogger{}
+	appConfig, _ := config.LoadConfig("", path)
+	loader := rule.NewRuleLoader()
+	rulesDir := appConfig.Rules
+	if rulesDir == "" {
+		rulesDir = "configs/rules"
+	}
+	rules, _ := loader.LoadFromDir(rulesDir)
+	matcher := rule.NewMatcher(rules, appConfig)
+	s := scanner.NewScanner(appConfig.Exclude.Files, l)
+	engine := app.NewEngine(appConfig, s, l, false)
+
+	// 注册插件 (与 handleScan 保持完全一致)
+	engine.RegisterParser(plugin.NewYamlParser())
+	engine.RegisterParser(plugin.NewJsonParser())
+	engine.RegisterParser(plugin.NewPythonParser())
+	engine.RegisterParser(plugin.NewGoParser())
+	engine.RegisterParser(plugin.NewJavascriptParser())
+	engine.RegisterParser(plugin.NewJavaParser())
+	engine.RegisterParser(plugin.NewPhpParser())
+	engine.RegisterParser(plugin.NewShellParser())
+	engine.RegisterParser(plugin.NewConfigParser())
+	engine.RegisterParser(plugin.NewPlainTextParser())
+	engine.RegisterParser(plugin.NewXmlParser())
+	engine.RegisterParser(plugin.NewDockerfileParser())
+	engine.RegisterParser(plugin.NewHtmlParser())
+	engine.RegisterParser(plugin.NewJpropertiesParser())
+	engine.RegisterParser(plugin.NewNpmrcParser())
+	engine.RegisterParser(plugin.NewPipParser())
+	engine.RegisterParser(plugin.NewPypircParser())
+	engine.RegisterParser(plugin.NewDockercfgParser())
+	engine.RegisterParser(plugin.NewHtpasswdParser())
+	engine.SetMatcher(matcher)
+
+	// 2. 绑定实时钩子
+	engine.OnProgress = func(file string) {
+		event := ScanEvent{Type: "progress", Data: file}
+		payload, _ := json.Marshal(event)
+		fmt.Fprintf(w, "data: %s\n\n", string(payload))
+		flusher.Flush()
+	}
+
+	engine.OnFound = func(secret core.Secret) {
+		event := ScanEvent{Type: "found", Data: secret}
+		payload, _ := json.Marshal(event)
+		fmt.Fprintf(w, "data: %s\n\n", string(payload))
+		flusher.Flush()
+	}
+
+	// 3. 开启扫描
+	results := engine.Run(path)
+
+	// 4. 发送结束信号
+	eventDone := ScanEvent{Type: "done", Data: results}
+	payloadDone, _ := json.Marshal(eventDone)
+	fmt.Fprintf(w, "data: %s\n\n", string(payloadDone))
+	flusher.Flush()
 }
 
 // openBrowser 自动唤起用户默认浏览器
@@ -207,6 +288,13 @@ func extractContext(filePath string, targetLine int, level int) (string, int) {
 	return sb.String(), actualCount
 }
 
+// LLMVerifyResponse 是 AI 研判的响应包
+type LLMVerifyResponse struct {
+	Reply        string `json:"reply"`
+	ContextMsg   string `json:"context_msg"`
+	ContextBlock string `json:"context_block"`
+}
+
 type KimiMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -268,7 +356,7 @@ func handleLLMVerify(w http.ResponseWriter, r *http.Request) {
 	kimiReq := KimiRequest{
 		Model: "deepseek-chat", // 使用 DeepSeek 的模型
 		Messages: []KimiMessage{
-			{Role: "system", Content: "你是代码安全护卫谛听(DiTing)的智能分析中枢。"},
+			{Role: "system", Content: "你是一个资深的实战派网络安全专家。你的任务是分析代码中的硬编码机密泄露。请根据提供的代码上下文，准确判断该风险是【真实泄露】还是【误报】。如果是真实泄露，请给出详细的危害说明，并必须附带一份 Markdown 格式的【建议修复方案】代码块。"},
 			{Role: "user", Content: prompt},
 		},
 	}
@@ -318,9 +406,10 @@ func handleLLMVerify(w http.ResponseWriter, r *http.Request) {
 
 	// 返回结果给前端
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"reply":       aiReply,
-		"context_msg": contextMsg,
+	json.NewEncoder(w).Encode(LLMVerifyResponse{
+		Reply:        aiReply,
+		ContextMsg:   contextMsg,
+		ContextBlock: contextBlock,
 	})
 }
 
@@ -332,7 +421,8 @@ func handlePickFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 利用 PowerShell 唤起原生的 FolderBrowserDialog
-	psScript := `Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '请选择要扫描的源码文件夹'; if($f.ShowDialog() -eq 'OK'){ $f.SelectedPath }`
+	// 关键：强制设置输出编码为 UTF8 以解决中文乱码问题
+	psScript := `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '请选择要扫描的源码文件夹'; if($f.ShowDialog() -eq 'OK'){ $f.SelectedPath }`
 	
 	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript)
 	out, err := cmd.Output()
@@ -347,4 +437,30 @@ func handlePickFolder(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"path": selectedPath})
+}
+
+// handlePreview 提供轻量级的实时代码快照预览 (无需 AI)
+func handlePreview(w http.ResponseWriter, r *http.Request) {
+	filePath := r.URL.Query().Get("file")
+	lineStr := r.URL.Query().Get("line")
+	levelStr := r.URL.Query().Get("level") // 新增：等级参数
+	
+	lineNum, _ := strconv.Atoi(lineStr)
+	level, err := strconv.Atoi(levelStr)
+	if err != nil || level <= 0 {
+		level = 2 // 默认前后约 5 行
+	}
+
+	if filePath == "" || lineNum <= 0 {
+		http.Error(w, "Invalid parameters", http.StatusBadRequest)
+		return
+	}
+
+	// 统一获取前后 N 行作为“轻量级”预览
+	context, _ := extractContext(filePath, lineNum, level)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"content": context,
+	})
 }

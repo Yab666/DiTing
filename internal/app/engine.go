@@ -12,7 +12,6 @@ import (
 	"strings"
 )
 
-// Engine 是扫描任务的核心控制器。
 type Engine struct {
 	Config  *core.AppConfig
 	Scanner scanner.FileScanner
@@ -21,6 +20,10 @@ type Engine struct {
 
 	Parsers map[string]plugin.Parser // 后缀名 -> 解析器
 	Matcher *rule.Matcher           // 规则匹配引擎
+
+	// 观察者钩子
+	OnProgress func(path string)       // 正在分析某个文件
+	OnFound    func(line core.Secret) // 发现了一个泄露点
 }
 
 // NewEngine 创建一个基于接口的引擎实例。
@@ -63,6 +66,11 @@ func (e *Engine) Run(root string) []core.Secret {
 	for path := range filePaths {
 		count++
 
+		// 触发进度回调
+		if e.OnProgress != nil {
+			e.OnProgress(path)
+		}
+
 		// A. 新增对齐：注入“文件名”虚拟键值对，专门用于命中的 sensitive-files 规则
 		if e.Matcher != nil {
 			fileName := filepath.Base(path)
@@ -73,14 +81,19 @@ func (e *Engine) Run(root string) []core.Secret {
 				Line:  0,
 			}
 			if rule := e.Matcher.Match(fileKV); rule != nil {
-				allSecrets = append(allSecrets, core.Secret{
+				secret := core.Secret{
 					RuleID:      rule.ID,
 					Description: rule.Description,
 					FilePath:    path,
 					LineNumber:  0,
 					Content:     fileName,
 					Severity:    rule.Severity,
-				})
+				}
+				allSecrets = append(allSecrets, secret)
+				// 触发发现回调
+				if e.OnFound != nil {
+					e.OnFound(secret)
+				}
 			}
 		}
 
@@ -113,14 +126,19 @@ func (e *Engine) Run(root string) []core.Secret {
 						path, kv.Line, rule.Description, kv.Value)
 					
 					// 收集进结果池用于最终导出报表
-					allSecrets = append(allSecrets, core.Secret{
+					secret := core.Secret{
 						RuleID:      rule.ID,
 						Description: rule.Description,
 						FilePath:    path,
 						LineNumber:  kv.Line,
 						Content:     kv.Value,
 						Severity:    rule.Severity,
-					})
+					}
+					allSecrets = append(allSecrets, secret)
+					// 触发发现回调
+					if e.OnFound != nil {
+						e.OnFound(secret)
+					}
 				}
 			}
 		}

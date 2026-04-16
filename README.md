@@ -1,4 +1,6 @@
 <div align="center">
+  <img src="./internal/ui/web/assets/logo.png" width="200" />
+  <br>
   <img src="https://img.shields.io/badge/Status-Completed-success?style=for-the-badge&logoColor=white" />
   <img src="https://img.shields.io/badge/Language-Go%201.20+-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
   <img src="https://img.shields.io/badge/Architecture-Clean%20Architecture-blueviolet?style=for-the-badge" />
