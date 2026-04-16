@@ -10,6 +10,10 @@ createApp({
         const consoleLogs = ref([])
         const consoleBody = ref(null)
 
+        // 导航状态 (解耦：首页 vs 审计中心)
+        const activeTab = ref('home')
+        const goAudit = () => activeTab.value = 'audit'
+
         // 图表实例
         let typeChartInstance = null
         let severityChartInstance = null
@@ -355,7 +359,7 @@ createApp({
             startScan, totalCritical, totalMajor, shortenPath, verifyWithAI,
             showAiModal, aiMessages, isAiThinking, closeAiModal, chatBody, apiKey, contextLevel, pickFolder,
             filteredResults, filterSeverity, filterSearch, sortKey, toggleSort, hoverPreviews, loadPreview,
-            previewContextLevel, clearPreviews
+            previewContextLevel, clearPreviews, activeTab, goAudit
         }
     }
 }).mount('#app')

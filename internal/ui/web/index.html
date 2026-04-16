@@ -18,67 +18,65 @@
     <div id="app">
         <!-- 移除了花里胡哨的背景发光球，回归高端极简深色模式 -->
         <div class="container">
-            <!-- 头部导航 (Dashboard 模式显示) -->
-            <transition name="fade-slide">
-                <header class="header" v-if="isScanning || hasScanned" style="margin-bottom: 32px;">
-                    <div class="logo">
-                        <img src="assets/logo.png" style="height: 40px; width: 40px; border-radius: 8px;">
-                        <div>
-                            <h1 style="font-size: 18px;">DiTing</h1>
-                            <span class="subtitle" style="font-size: 11px;">安全审计实时视图</span>
-                        </div>
-                    </div>
-                    <!-- 紧凑型顶部控制条 -->
-                    <div class="control-panel panel" style="margin-bottom: 0px; flex: 1; margin-left: 24px; border-radius: 12px; padding: 6px;">
-                        <div class="input-group" style="height: 36px; padding: 0 12px;">
-                            <i class="ph ph-folder-open" @click="pickFolder" style="font-size: 16px;"></i>
-                            <input type="text" v-model="scanPath" @keyup.enter="startScan" :disabled="isScanning" placeholder="路径..." style="font-size: 12px;">
-                        </div>
-                        <button class="btn btn-primary" @click="startScan" :disabled="isScanning" style="padding: 0 16px; height: 36px; font-size: 12px;">
-                            <i class="ph ph-radar" :class="{ spinning: isScanning }"></i>
-                            {{ isScanning ? '检索中...' : '重新扫描' }}
-                        </button>
-                    </div>
-                </header>
-            </transition>
+            <!-- 顶部全局导航栏 (Decoupled Navbar) -->
+            <nav class="navbar panel">
+                <div class="nav-brand" @click="activeTab = 'home'">
+                    <img src="assets/logo.png" class="nav-logo">
+                    <span>DiTing</span>
+                </div>
+                <div class="nav-links">
+                    <button :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
+                        <i class="ph ph-house"></i> 首页
+                    </button>
+                    <button :class="{ active: activeTab === 'audit' }" @click="activeTab = 'audit'">
+                        <i class="ph ph-shield-check"></i> 审计中心
+                    </button>
+                </div>
+            </nav>
 
-            <!-- 初始英雄页 (仅初始进入显示) -->
+            <!-- 首页视图 (Home Tab) -->
             <transition name="fade-slide">
-                <section class="landing-hero" v-if="!isScanning && !hasScanned">
+                <section class="landing-hero" v-if="activeTab === 'home'">
                     <img src="assets/logo.png" class="hero-logo">
                     <h1>DiTing Security Radar</h1>
                     <p class="hero-subtitle">
                         基于 Go 并发引擎与 DeepSeek AI 驱动的下一代隐私挖掘与秘密审计平台。
                         <br>精准、高速、零误报。
                     </p>
-                    
-                    <div class="hero-controls">
-                        <div class="control-panel panel">
-                            <div class="input-group">
-                                <i class="ph ph-folder-open" @click="pickFolder" style="cursor: pointer; color: var(--color-accent);"></i>
-                                <input type="text" v-model="scanPath" @keyup.enter="startScan" placeholder="请选择或输入要扫描的源码文件夹路径...">
-                            </div>
-                            <div class="input-group" style="max-width: 280px;">
-                                <i class="ph ph-key"></i>
-                                <input type="password" v-model="apiKey" placeholder="DeepSeek API Key (可选)">
-                            </div>
-                            <button class="btn btn-primary" @click="startScan" style="padding: 0 24px;">
-                                <i class="ph ph-radar"></i>
-                                立即启动雷达
-                            </button>
-                        </div>
-                        <div class="text-secondary text-sm" style="margin-top: 24px; display: flex; justify-content: center; gap: 24px;">
-                            <span><i class="ph ph-lightning"></i> 19+ 语种深度解析</span>
-                            <span><i class="ph ph-brain"></i> AI 语义去噪</span>
-                            <span><i class="ph ph-shield-check"></i> 本地零依赖运行</span>
+                    <div class="hero-actions">
+                        <button class="btn btn-hero" @click="goAudit">
+                            <i class="ph ph-rocket-launch"></i> 立即进入审计中心
+                        </button>
+                        <div class="hero-badges">
+                            <span><i class="ph ph-lightning"></i> 极速并发</span>
+                            <span><i class="ph ph-brain"></i> AI 降噪</span>
+                            <span><i class="ph ph-shield-check"></i> 开箱即用</span>
                         </div>
                     </div>
                 </section>
             </transition>
 
-            <!-- 实时仪表盘 / 数字化大屏 -->
+            <!-- 审计中心视图 (Audit Center) -->
             <transition name="fade-slide">
-                <section class="dashboard-grid" v-if="isScanning || hasScanned">
+                <div class="audit-view" v-if="activeTab === 'audit'">
+                    <section class="control-panel panel">
+                        <div class="input-group">
+                            <i class="ph ph-folder-open" @click="pickFolder" style="cursor: pointer; color: var(--color-accent);"></i>
+                            <input type="text" v-model="scanPath" @keyup.enter="startScan" :disabled="isScanning" placeholder="请输入要扫描的源码文件夹路径...">
+                        </div>
+                        <div class="input-group" style="max-width: 280px;">
+                            <i class="ph ph-key"></i>
+                            <input type="password" v-model="apiKey" placeholder="DeepSeek API Key (可选)">
+                        </div>
+                        <button class="btn btn-primary" @click="startScan" :disabled="isScanning">
+                            <i class="ph ph-radar" :class="{ spinning: isScanning }"></i>
+                            {{ isScanning ? '审计中...' : '启动审计' }}
+                        </button>
+                    </section>
+
+                    <!-- 数字化大屏 (Dashboard) -->
+                    <section class="dashboard-grid" v-if="isScanning || hasScanned">
+                        <!-- 这里的代码保持原来的逻辑，但放在 audit-view 内 -->
                 <!-- 左侧：统计卡片组 -->
                 <div class="stats-sidebar">
                     <div class="stat-card panel" :class="{ 'warning-glow': isScanning }">
@@ -138,67 +136,60 @@
                 </div>
             </section>
 
-            <!-- 数据表格区 -->
-            <section class="table-panel panel" v-if="!isScanning && results.length > 0">
-                <!-- 筛选与搜索工具条 -->
-                <div class="filter-bar">
-                    <div class="search-box">
-                        <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" v-model="filterSearch" placeholder="搜索路径、规则、内容...">
-                    </div>
-                    <select v-model="filterSeverity">
-                        <option value="ALL">全部严重程度</option>
-                        <option value="CRITICAL">Critical</option>
-                        <option value="MAJOR">Major</option>
-                        <option value="MINOR">Minor</option>
-                        <option value="INFO">Info</option>
-                    </select>
-                    <select v-model="previewContextLevel" @change="clearPreviews" style="max-width: 140px;">
-                        <option value="1">预览量: 极小 (±2)</option>
-                        <option value="2" selected>预览量: 标准 (±5)</option>
-                        <option value="3">预览量: 丰富 (±10)</option>
-                        <option value="4">预览量: 全景 (±20)</option>
-                    </select>
-                    <div class="text-secondary text-sm">
-                        匹配项: {{ filteredResults.length }} / {{ results.length }}
-                    </div>
-                </div>
+                    </section>
 
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable" @click="toggleSort('Severity')" :class="{'active-sort': sortKey === 'Severity'}">风险等级</th>
-                            <th class="sortable" @click="toggleSort('RuleID')" :class="{'active-sort': sortKey === 'RuleID'}">命中规则</th>
-                            <th class="sortable" @click="toggleSort('FilePath')" :class="{'active-sort': sortKey === 'FilePath'}">文件路径</th>
-                            <th class="sortable" @click="toggleSort('Content')" :class="{'active-sort': sortKey === 'Content'}">代码快照</th>
-                            <th class="text-right">智能研判</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(item, idx) in filteredResults" :key="idx">
-                            <td><span class="badge" :class="item.Severity.toLowerCase()">{{ item.Severity }}</span></td>
-                            <td class="font-mono text-sm">{{ item.RuleID }}</td>
-                            <td class="text-muted" :title="item.FilePath">{{ shortenPath(item.FilePath) }} <span class="line-badge">L{{ item.LineNumber }}</span></td>
-                            <td>
-                                <!-- 悬浮上下文预览容器 -->
-                                <div class="popover-container" @mouseenter="loadPreview(item)">
-                                    <code class="snippet">{{ item.Content }}</code>
-                                    <div class="popover-content">
-                                        <div class="popover-header"><i class="ph ph-eye"></i> 代码上下文实时预览 (±5行)</div>
-                                        <div class="popover-body" v-html="hoverPreviews[item.FilePath + ':' + item.LineNumber] || '<div style=\'padding:20px;text-align:center\'><i class=\'ph ph-spinner-gap spinning\'></i> 正在调取原文...</div>'"></div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="text-right">
-                                <button class="btn-ai" @click="verifyWithAI(item, idx)" :disabled="item.aiVerifying">
-                                    <i class="ph ph-magic-wand" :class="{ spinning: item.aiVerifying }"></i>
-                                    {{ item.aiStatus || 'AI 复核' }}
-                                </button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
+                    <!-- 数据表格区 (增加审计模式判断) -->
+                    <section class="table-panel panel" v-if="hasScanned && results.length > 0">
+                        <div class="filter-bar">
+                            <div class="search-box">
+                                <i class="ph ph-magnifying-glass"></i>
+                                <input type="text" v-model="filterSearch" placeholder="在结果中搜索...">
+                            </div>
+                            <!-- 之前的繁琐选择器已简化，只保留严重程度 -->
+                            <select v-model="filterSeverity">
+                                <option value="ALL">全部级别</option>
+                                <option value="CRITICAL">Critical</option>
+                                <option value="MAJOR">Major</option>
+                                <option value="MINOR">Minor</option>
+                            </select>
+                            <div class="text-secondary text-sm">匹配: {{ filteredResults.length }} / {{ results.length }}</div>
+                        </div>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="sortable" @click="toggleSort('Severity')">风险等级</th>
+                                    <th class="sortable" @click="toggleSort('RuleID')">命中规则</th>
+                                    <th>文件路径</th>
+                                    <th>代码快照</th>
+                                    <th class="text-right">智能研判</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(item, idx) in filteredResults" :key="idx">
+                                    <td><span class="badge" :class="item.Severity.toLowerCase()">{{ item.Severity }}</span></td>
+                                    <td class="font-mono text-sm">{{ item.RuleID }}</td>
+                                    <td class="text-muted" :title="item.FilePath">{{ shortenPath(item.FilePath) }} L{{ item.LineNumber }}</td>
+                                    <td>
+                                        <div class="popover-container" @mouseenter="loadPreview(item)">
+                                            <code class="snippet">{{ item.Content }}</code>
+                                            <div class="popover-content">
+                                                <div class="popover-header">代码上下文预览</div>
+                                                <div class="popover-body" v-html="hoverPreviews[item.FilePath + ':' + item.LineNumber] || '加载中...'"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-right">
+                                        <button class="btn-ai" @click="verifyWithAI(item, idx)" :disabled="item.aiVerifying">
+                                            <i class="ph ph-magic-wand"></i> AI 复核
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
+                </div>
+            </transition>
             <!-- Chat Modal -->
             <div class="chat-overlay" v-if="showAiModal" @click.self="closeAiModal">
                 <div class="chat-modal">
