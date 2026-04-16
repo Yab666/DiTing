@@ -42,6 +42,7 @@ func StartWebServer(port int) error {
 	// API 路由
 	http.HandleFunc("/api/scan", handleScan)
 	http.HandleFunc("/api/llm/verify", handleLLMVerify)
+	http.HandleFunc("/api/ui/pick-folder", handlePickFolder)
 
 	// 静态资源路由（映射 embed.FS 里的 web 目录）
 	subFS, err := fs.Sub(webAssets, "web")
@@ -321,4 +322,29 @@ func handleLLMVerify(w http.ResponseWriter, r *http.Request) {
 		"reply":       aiReply,
 		"context_msg": contextMsg,
 	})
+}
+
+// handlePickFolder 唤起系统原生文件夹选择对话框 (支持 Windows)
+func handlePickFolder(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "windows" {
+		http.Error(w, "目前该功能仅支持 Windows 系统", http.StatusNotImplemented)
+		return
+	}
+
+	// 利用 PowerShell 唤起原生的 FolderBrowserDialog
+	psScript := `Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '请选择要扫描的源码文件夹'; if($f.ShowDialog() -eq 'OK'){ $f.SelectedPath }`
+	
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript)
+	out, err := cmd.Output()
+	
+	selectedPath := strings.TrimSpace(string(out))
+	if err != nil || selectedPath == "" {
+		// 返回空路径表示取消选择
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"path": ""})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"path": selectedPath})
 }

@@ -30,8 +30,8 @@
             <!-- 扫描控制区 -->
             <section class="control-panel panel">
                 <div class="input-group">
-                    <i class="ph ph-folder-open"></i>
-                    <input type="text" v-model="scanPath" @keyup.enter="startScan" :disabled="isScanning" placeholder="请输入需要扫描的绝对路径 (如 E:/项目代码)">
+                    <i class="ph ph-folder-open" @click="pickFolder" title="点击打开对话框选择文件夹" style="cursor: pointer; color: var(--accent-color);"></i>
+                    <input type="text" v-model="scanPath" @keyup.enter="startScan" :disabled="isScanning" placeholder="请输入扫描路径或点击左侧图标选择">
                 </div>
                 <div class="input-group" style="max-width: 330px; border-left: 1px solid var(--border-color); border-radius: 0;">
                     <i class="ph ph-key"></i>

@@ -63,6 +63,27 @@ func (e *Engine) Run(root string) []core.Secret {
 	for path := range filePaths {
 		count++
 
+		// A. 新增对齐：注入“文件名”虚拟键值对，专门用于命中的 sensitive-files 规则
+		if e.Matcher != nil {
+			fileName := filepath.Base(path)
+			fileKV := plugin.KeyValue{
+				Key:   "file",
+				Value: fileName,
+				Path:  "metadata",
+				Line:  0,
+			}
+			if rule := e.Matcher.Match(fileKV); rule != nil {
+				allSecrets = append(allSecrets, core.Secret{
+					RuleID:      rule.ID,
+					Description: rule.Description,
+					FilePath:    path,
+					LineNumber:  0,
+					Content:     fileName,
+					Severity:    rule.Severity,
+				})
+			}
+		}
+
 		// 1. 获取对应的解析器 (智能调度逻辑)
 		p := e.getParserForFile(path)
 		if p == nil {

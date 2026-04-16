@@ -60,6 +60,7 @@ createApp({
         const aiMessages = ref([])
         const isAiThinking = ref(false)
         const chatBody = ref(null)
+        const pickFolderLoading = ref(false)
         
         // DeepSeek API Key 状态管理，并从本地存储持久化
         const apiKey = ref(localStorage.getItem('diting_deepseek_apikey') || '')
@@ -75,6 +76,22 @@ createApp({
                     chatBody.value.scrollTop = chatBody.value.scrollHeight;
                 }
             }, 50);
+        }
+
+        const pickFolder = async () => {
+            if (pickFolderLoading.value) return;
+            pickFolderLoading.value = true;
+            try {
+                const response = await fetch('/api/ui/pick-folder');
+                const data = await response.json();
+                if (data.path) {
+                    scanPath.value = data.path;
+                }
+            } catch (e) {
+                console.error("无法调起文件夹选择器:", e);
+            } finally {
+                pickFolderLoading.value = false;
+            }
         }
 
         const verifyWithAI = async (item, idx) => {
@@ -171,7 +188,8 @@ createApp({
             closeAiModal,
             chatBody,
             apiKey,
-            contextLevel
+            contextLevel,
+            pickFolder
         }
     }
 }).mount('#app')
