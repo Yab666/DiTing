@@ -18,44 +18,67 @@
     <div id="app">
         <!-- 移除了花里胡哨的背景发光球，回归高端极简深色模式 -->
         <div class="container">
-            <!-- 头部区 -->
-            <header class="header">
-                <div class="logo">
-                    <img src="assets/logo.png" style="height: 48px; width: 48px; border-radius: 8px; margin-right: 4px;">
-                    <div>
-                        <h1>DiTing</h1>
-                        <span class="subtitle">新一代智能静态安全审计台</span>
+            <!-- 头部导航 (Dashboard 模式显示) -->
+            <transition name="fade-slide">
+                <header class="header" v-if="isScanning || hasScanned" style="margin-bottom: 32px;">
+                    <div class="logo">
+                        <img src="assets/logo.png" style="height: 40px; width: 40px; border-radius: 8px;">
+                        <div>
+                            <h1 style="font-size: 18px;">DiTing</h1>
+                            <span class="subtitle" style="font-size: 11px;">安全审计实时视图</span>
+                        </div>
                     </div>
-                </div>
-            </header>
+                    <!-- 紧凑型顶部控制条 -->
+                    <div class="control-panel panel" style="margin-bottom: 0px; flex: 1; margin-left: 24px; border-radius: 12px; padding: 6px;">
+                        <div class="input-group" style="height: 36px; padding: 0 12px;">
+                            <i class="ph ph-folder-open" @click="pickFolder" style="font-size: 16px;"></i>
+                            <input type="text" v-model="scanPath" @keyup.enter="startScan" :disabled="isScanning" placeholder="路径..." style="font-size: 12px;">
+                        </div>
+                        <button class="btn btn-primary" @click="startScan" :disabled="isScanning" style="padding: 0 16px; height: 36px; font-size: 12px;">
+                            <i class="ph ph-radar" :class="{ spinning: isScanning }"></i>
+                            {{ isScanning ? '检索中...' : '重新扫描' }}
+                        </button>
+                    </div>
+                </header>
+            </transition>
 
-            <!-- 扫描控制区 -->
-            <section class="control-panel panel">
-                <div class="input-group">
-                    <i class="ph ph-folder-open" @click="pickFolder" title="点击打开对话框选择文件夹" style="cursor: pointer; color: var(--accent-color);"></i>
-                    <input type="text" v-model="scanPath" @keyup.enter="startScan" :disabled="isScanning" placeholder="请输入扫描路径或点击左侧图标选择">
-                </div>
-                <div class="input-group" style="max-width: 330px; border-left: 1px solid var(--border-color); border-radius: 0;">
-                    <i class="ph ph-key"></i>
-                    <input type="password" v-model="apiKey" placeholder="DeepSeek API Key (可选)">
-                </div>
-                <div class="input-group" style="max-width: 200px; border-left: 1px solid var(--border-color); border-radius: 0;">
-                    <i class="ph ph-sliders"></i>
-                    <select v-model="contextLevel" style="background: transparent; border: none; color: var(--text-primary); outline: none; width: 100%; cursor: pointer;">
-                        <option value="1">视野 Lv1 (仅单行)</option>
-                        <option value="2">视野 Lv2 (±5行)</option>
-                        <option value="3">视野 Lv3 (±20行)</option>
-                        <option value="4">视野 Lv4 (±50行)</option>
-                    </select>
-                </div>
-                <button class="btn btn-primary" @click="startScan" :disabled="isScanning">
-                    <i class="ph ph-radar" :class="{ spinning: isScanning }"></i>
-                    {{ isScanning ? '引擎全域检索中...' : '启动雷达扫描' }}
-                </button>
-            </section>
+            <!-- 初始英雄页 (仅初始进入显示) -->
+            <transition name="fade-slide">
+                <section class="landing-hero" v-if="!isScanning && !hasScanned">
+                    <img src="assets/logo.png" class="hero-logo">
+                    <h1>DiTing Security Radar</h1>
+                    <p class="hero-subtitle">
+                        基于 Go 并发引擎与 DeepSeek AI 驱动的下一代隐私挖掘与秘密审计平台。
+                        <br>精准、高速、零误报。
+                    </p>
+                    
+                    <div class="hero-controls">
+                        <div class="control-panel panel">
+                            <div class="input-group">
+                                <i class="ph ph-folder-open" @click="pickFolder" style="cursor: pointer; color: var(--color-accent);"></i>
+                                <input type="text" v-model="scanPath" @keyup.enter="startScan" placeholder="请选择或输入要扫描的源码文件夹路径...">
+                            </div>
+                            <div class="input-group" style="max-width: 280px;">
+                                <i class="ph ph-key"></i>
+                                <input type="password" v-model="apiKey" placeholder="DeepSeek API Key (可选)">
+                            </div>
+                            <button class="btn btn-primary" @click="startScan" style="padding: 0 24px;">
+                                <i class="ph ph-radar"></i>
+                                立即启动雷达
+                            </button>
+                        </div>
+                        <div class="text-secondary text-sm" style="margin-top: 24px; display: flex; justify-content: center; gap: 24px;">
+                            <span><i class="ph ph-lightning"></i> 19+ 语种深度解析</span>
+                            <span><i class="ph ph-brain"></i> AI 语义去噪</span>
+                            <span><i class="ph ph-shield-check"></i> 本地零依赖运行</span>
+                        </div>
+                    </div>
+                </section>
+            </transition>
 
             <!-- 实时仪表盘 / 数字化大屏 -->
-            <section class="dashboard-grid" v-if="isScanning || hasScanned">
+            <transition name="fade-slide">
+                <section class="dashboard-grid" v-if="isScanning || hasScanned">
                 <!-- 左侧：统计卡片组 -->
                 <div class="stats-sidebar">
                     <div class="stat-card panel" :class="{ 'warning-glow': isScanning }">
