@@ -1,4 +1,5 @@
 import { store, useScanner } from '../store.js'
+import { exportReport as triggerExport } from '../reporter.js'
 
 export default {
     template: `
@@ -108,6 +109,14 @@ export default {
                         <option value="MAJOR">Major</option>
                         <option value="MINOR">Minor</option>
                     </select>
+                    <div style="margin-left: auto; display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" @click="exportReport('csv')" :disabled="filteredResults.length === 0" style="padding: 6px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ph ph-file-csv"></i> 导出 CSV
+                        </button>
+                        <button class="btn btn-primary" @click="exportReport('html')" :disabled="filteredResults.length === 0" style="padding: 6px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px; background-color: var(--color-accent); color: #050505; font-weight: 600;">
+                            <i class="ph ph-file-html"></i> 导出 HTML
+                        </button>
+                    </div>
                     <div class="text-secondary text-sm">匹配: {{ filteredResults.length }} / {{ store.results.length }}</div>
                 </div>
 
@@ -285,6 +294,10 @@ export default {
         const minorCount = computed(() => store.results.filter(x => x.Severity === 'MINOR').length)
         const infoCount = computed(() => store.results.filter(x => x.Severity === 'INFO').length)
 
-        return { store, startScan, filterSeverity, filterSearch, filteredResults, toggleSort, shortenPath, pickFolder, loadPreview, consoleBody, criticalCount, majorCount, minorCount, infoCount }
+        const exportReport = (format) => {
+            triggerExport(filteredResults.value, format)
+        }
+
+        return { store, startScan, filterSeverity, filterSearch, filteredResults, toggleSort, shortenPath, pickFolder, loadPreview, consoleBody, criticalCount, majorCount, minorCount, infoCount, exportReport }
     }
 }
