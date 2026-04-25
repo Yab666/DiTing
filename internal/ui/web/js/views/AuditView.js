@@ -20,8 +20,8 @@ export default {
                 </button>
             </section>
 
-            <!-- 数字化大屏 -->
-            <section class="dashboard-grid" v-if="store.isScanning || store.hasScanned">
+            <!-- 数字化大屏 (始终显示，修复图表挂载时找不到DOM的问题) -->
+            <section class="dashboard-grid">
                 <div class="stats-sidebar">
                     <div class="stat-card panel" :class="{ 'warning-glow': store.isScanning }">
                         <i class="ph ph-files"></i>
@@ -35,6 +35,13 @@ export default {
                         <div class="stat-info">
                             <span class="stat-value">{{ store.results.length }}</span>
                             <span class="stat-label">捕获点</span>
+                        </div>
+                    </div>
+                    <div class="stat-card panel warning">
+                        <i class="ph ph-warning-diamond"></i>
+                        <div class="stat-info">
+                            <span class="stat-value">{{ criticalCount }}</span>
+                            <span class="stat-label">致命风险</span>
                         </div>
                     </div>
                 </div>
@@ -51,14 +58,45 @@ export default {
                     </div>
                 </div>
 
-                <div class="charts-sidebar panel">
-                   <div class="chart-box"><canvas id="typeChart"></canvas></div>
-                   <div class="chart-box"><canvas id="severityChart"></canvas></div>
+                <div class="charts-sidebar panel" style="display: flex; flex-direction: column;">
+                    <div class="panel-header" style="padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 16px;">
+                        <span style="font-size: 13px; font-weight: 600; color: #e5e5e5; display: flex; align-items: center; gap: 8px;">
+                            <i class="ph-duotone ph-chart-donut" style="color: var(--color-accent); font-size: 16px;"></i> 风险构成分析
+                        </span>
+                    </div>
+                    
+                    <!-- 极客风 2x2 统计网格 -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px; margin-bottom: 24px;">
+                        <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <span style="color: rgba(255,255,255,0.5); font-size: 10px; letter-spacing: 1px; margin-bottom: 4px;">CRITICAL</span>
+                            <span style="color: #f87171; font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; text-shadow: 0 0 10px rgba(239,68,68,0.5);">{{ criticalCount }}</span>
+                        </div>
+                        <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <span style="color: rgba(255,255,255,0.5); font-size: 10px; letter-spacing: 1px; margin-bottom: 4px;">MAJOR</span>
+                            <span style="color: #fbbf24; font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; text-shadow: 0 0 10px rgba(245,158,11,0.5);">{{ majorCount }}</span>
+                        </div>
+                        <div style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.15); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <span style="color: rgba(255,255,255,0.5); font-size: 10px; letter-spacing: 1px; margin-bottom: 4px;">MINOR</span>
+                            <span style="color: #60a5fa; font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; text-shadow: 0 0 10px rgba(59,130,246,0.5);">{{ minorCount }}</span>
+                        </div>
+                        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <span style="color: rgba(255,255,255,0.5); font-size: 10px; letter-spacing: 1px; margin-bottom: 4px;">INFO</span>
+                            <span style="color: #a3a3a3; font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700;">{{ infoCount }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 动态图表区域 (居中饱满的环形图) -->
+                    <div style="flex: 1; padding: 0 16px 16px 16px; display: flex; flex-direction: column; justify-content: center; position: relative;">
+                        <div style="position: absolute; top: 0; left: 16px; right: 16px; border-top: 1px dashed rgba(255,255,255,0.1);"></div>
+                        <div class="chart-box" style="position: relative; width: 100%; height: 160px; margin-top: 16px;">
+                            <canvas id="severityChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </section>
 
-            <!-- 数据表格 -->
-            <section class="table-panel panel" v-if="store.hasScanned && store.results.length > 0">
+            <!-- 数据表格区 (强制显示，避免布局坍塌) -->
+            <section class="table-panel panel">
                 <div class="filter-bar">
                     <div class="search-box">
                         <i class="ph ph-magnifying-glass"></i>
@@ -84,6 +122,12 @@ export default {
                         </tr>
                     </thead>
                     <tbody>
+                        <tr v-if="filteredResults.length === 0">
+                            <td colspan="5" style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                                <i class="ph ph-coffee" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
+                                暂无审计数据...
+                            </td>
+                        </tr>
                         <tr v-for="(item, idx) in filteredResults" :key="idx">
                             <td><span class="badge" :class="item.Severity.toLowerCase()">{{ item.Severity }}</span></td>
                             <td class="font-mono">{{ item.RuleID }}</td>
@@ -115,32 +159,11 @@ export default {
         const consoleBody = ref(null)
 
         // 图表逻辑
-        let typeChartInstance = null
         let severityChartInstance = null
 
         const initCharts = () => {
-             const typeCtx = document.getElementById('typeChart')?.getContext('2d')
              const sevCtx = document.getElementById('severityChart')?.getContext('2d')
-             if (!typeCtx || !sevCtx) return
-
-             typeChartInstance = new Chart(typeCtx, {
-                 type: 'radar',
-                 data: {
-                     labels: ['Password', 'Secret', 'URI', 'File', 'Key', 'Other'],
-                     datasets: [{
-                         label: '漏洞分布',
-                         data: [0, 0, 0, 0, 0, 0],
-                         fill: true,
-                         backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                         borderColor: 'rgb(59, 130, 246)',
-                         pointBackgroundColor: 'rgb(59, 130, 246)',
-                     }]
-                 },
-                 options: {
-                     scales: { r: { grid: { color: '#262626' }, ticks: { display: false } } },
-                     plugins: { legend: { labels: { color: '#ededed', font: { size: 10 } } } }
-                 }
-             })
+             if (!sevCtx) return
 
              severityChartInstance = new Chart(sevCtx, {
                  type: 'doughnut',
@@ -148,19 +171,34 @@ export default {
                      labels: ['Critical', 'Major', 'Minor', 'Info'],
                      datasets: [{
                          data: [0, 0, 0, 0],
-                         backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#737373'],
-                         borderWidth: 0
+                         backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#404040'],
+                         borderWidth: 0,
+                         hoverOffset: 4
                      }]
                  },
                  options: {
-                     cutout: '70%',
-                     plugins: { legend: { position: 'right', labels: { color: '#ededed', font: { size: 10 } } } }
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     cutout: '75%',
+                     plugins: { 
+                         legend: { 
+                             display: false
+                         },
+                         tooltip: {
+                             backgroundColor: 'rgba(0,0,0,0.8)',
+                             titleFont: { size: 13 },
+                             bodyFont: { size: 12, family: "'JetBrains Mono', monospace" },
+                             padding: 10,
+                             cornerRadius: 8
+                         }
+                     },
+                     layout: { padding: 0 }
                  }
              })
         }
 
         const updateCharts = () => {
-            if (!typeChartInstance || !severityChartInstance) return
+            if (!severityChartInstance) return
             const r = store.results
             const sevData = [
                 r.filter(x => x.Severity === 'CRITICAL').length,
@@ -170,19 +208,6 @@ export default {
             ]
             severityChartInstance.data.datasets[0].data = sevData
             severityChartInstance.update()
-
-            const types = [0, 0, 0, 0, 0, 0]
-            r.forEach(x => {
-                const id = x.RuleID.toLowerCase()
-                if (id.includes('password')) types[0]++
-                else if (id.includes('secret')) types[1]++
-                else if (id.includes('uri')) types[2]++
-                else if (id.includes('file')) types[3]++
-                else if (id.includes('key')) types[4]++
-                else types[5]++
-            })
-            typeChartInstance.data.datasets[0].data = types
-            typeChartInstance.update()
         }
 
         const { startScan } = useScanner(store, updateCharts)
@@ -245,11 +270,21 @@ export default {
         }
 
         onMounted(() => {
-            if (store.hasScanned && !typeChartInstance) {
-                nextTick(() => { initCharts(); updateCharts(); })
-            }
+            // 只要进入审计页，就立即初始化图表框架，使用双重 nextTick 确保 DOM 完全渲染
+            nextTick(() => { 
+                setTimeout(() => {
+                    initCharts(); 
+                    if (store.results.length > 0) updateCharts();
+                }, 100)
+            })
         })
 
-        return { store, startScan, filterSeverity, filterSearch, filteredResults, toggleSort, shortenPath, pickFolder, loadPreview, consoleBody }
+        // 计算属性：用于右侧统计表
+        const criticalCount = computed(() => store.results.filter(x => x.Severity === 'CRITICAL').length)
+        const majorCount = computed(() => store.results.filter(x => x.Severity === 'MAJOR').length)
+        const minorCount = computed(() => store.results.filter(x => x.Severity === 'MINOR').length)
+        const infoCount = computed(() => store.results.filter(x => x.Severity === 'INFO').length)
+
+        return { store, startScan, filterSeverity, filterSearch, filteredResults, toggleSort, shortenPath, pickFolder, loadPreview, consoleBody, criticalCount, majorCount, minorCount, infoCount }
     }
 }

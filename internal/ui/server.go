@@ -421,8 +421,8 @@ func handlePickFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 利用 PowerShell 唤起原生的 FolderBrowserDialog
-	// 关键：强制设置输出编码为 UTF8 以解决中文乱码问题
-	psScript := `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '请选择要扫描的源码文件夹'; if($f.ShowDialog() -eq 'OK'){ $f.SelectedPath }`
+	// 关键：强制设置输出编码为 UTF8，并使用 TopMost 窗体强制将对话框置顶
+	psScript := `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '请选择要扫描的源码文件夹'; $t = New-Object System.Windows.Forms.Form; $t.TopMost = $true; if($f.ShowDialog($t) -eq 'OK'){ $f.SelectedPath }`
 	
 	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript)
 	out, err := cmd.Output()
